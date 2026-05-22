@@ -1,0 +1,202 @@
+“””
+Tiger Stripe-Pattern Comparison via LLM Vision
+
+Compares two tiger photographs and decides whether they show the same individual,
+using stripe patterns, eye-patch shape, and facial markings as identification features.
+
+Tiger stripes are like fingerprints — no two tigers share the same pattern.
+This script asks an LLM to do that comparison for you, feature by feature.
+“””
+
+from **future** import annotations
+
+import argparse
+import base64
+import json
+import mimetypes
+import os
+import sys
+from pathlib import Path
+
+import anthropic
+
+COMPARISON_PROMPT = “”“You are a wildlife biologist specializing in Bengal tiger identification.
+
+Two tiger photographs are attached. Image 1 is an UNKNOWN sighting. Image 2 is a
+REFERENCE image of a known, named tiger.
+
+Tiger stripes are unique to each individual (like a fingerprint). Compare the two
+images feature by feature and decide whether they show the SAME tiger.
+
+Respond in this exact JSON format and nothing else:
+
+{
+“face”: {
+“eye_patch_shape”: “MATCH | MISMATCH | UNCLEAR”,
+“nose_and_whisker_pad”: “MATCH | MISMATCH | UNCLEAR”,
+“forehead_stripes”: “MATCH | MISMATCH | UNCLEAR”
+},
+“body”: {
+“mid_body_stripe_cluster”: “MATCH | MISMATCH | UNCLEAR”,
+“stripe_spacing_and_curvature”: “MATCH | MISMATCH | UNCLEAR”,
+“conflicting_stripe_breaks”: “NONE | PRESENT | UNCLEAR”
+},
+“build_and_posture”: {
+“frame”: “string description”,
+“gait_or_posture”: “string description”,
+“expression”: “string description”
+},
+“conclusion”: {
+“same_tiger”: true | false,
+“confidence”: “HIGH | MEDIUM | LOW”,
+“reasoning”: “one or two sentences explaining the call”
+}
+}
+
+Be strict. If the angle, light, or crop makes a feature unreadable, mark it UNCLEAR
+rather than guessing. Only return same_tiger: true if enough features clearly agree.”””
+
+def encode_image(path: Path) -> tuple[str, str]:
+“”“Return (base64_data, media_type) for an image file.”””
+if not path.exists():
+sys.exit(f”Error: file not found — {path}”)
+
+```
+media_type, _ = mimetypes.guess_type(str(path))
+if media_type not in {"image/jpeg", "image/png", "image/gif", "image/webp"}:
+    sys.exit(f"Error: unsupported image type for {path} (got {media_type})")
+
+data = base64.standard_b64encode(path.read_bytes()).decode("utf-8")
+return data, media_type
+```
+
+def compare_tigers(
+sighting_path: Path,
+reference_path: Path,
+reference_name: str | None = None,
+model: str = “claude-opus-4-5”,
+) -> dict:
+“”“Send both images to the LLM and return the parsed JSON verdict.”””
+client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from environment
+
+```
+sighting_data, sighting_type = encode_image(sighting_path)
+reference_data, reference_type = encode_image(reference_path)
+
+user_text = COMPARISON_PROMPT
+if reference_name:
+    user_text += f"\n\nThe reference tiger is named: {reference_name}."
+
+message = client.messages.create(
+    model=model,
+    max_tokens=1024,
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Image 1 — UNKNOWN sighting:"},
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": sighting_type,
+                        "data": sighting_data,
+                    },
+                },
+                {"type": "text", "text": "Image 2 — REFERENCE image:"},
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": reference_type,
+                        "data": reference_data,
+                    },
+                },
+                {"type": "text", "text": user_text},
+            ],
+        }
+    ],
+)
+
+raw = message.content[0].text.strip()
+# Strip ```json fences if the model wraps the response
+if raw.startswith("```"):
+    raw = raw.split("```", 2)[1]
+    if raw.startswith("json"):
+        raw = raw[4:]
+    raw = raw.strip().rstrip("`").strip()
+
+try:
+    return json.loads(raw)
+except json.JSONDecodeError as e:
+    sys.exit(f"Could not parse model response as JSON: {e}\n\nRaw output:\n{raw}")
+```
+
+def pretty_print(result: dict, reference_name: str | None) -> None:
+“”“Human-readable summary of the JSON verdict.”””
+
+```
+def icon(state: str) -> str:
+    return {"MATCH": "✅", "MISMATCH": "❌", "NONE": "✅",
+            "PRESENT": "❌", "UNCLEAR": "❓"}.get(state, "•")
+
+print("\n=== Tiger ID Comparison ===\n")
+
+print("👁  Face")
+for k, v in result["face"].items():
+    print(f"  {icon(v)} {k.replace('_', ' ').title():<28} {v}")
+
+print("\n🐯 Body (critical)")
+for k, v in result["body"].items():
+    print(f"  {icon(v)} {k.replace('_', ' ').title():<28} {v}")
+
+print("\n📐 Build & posture")
+for k, v in result["build_and_posture"].items():
+    print(f"  • {k.replace('_', ' ').title():<28} {v}")
+
+c = result["conclusion"]
+verdict = "SAME TIGER" if c["same_tiger"] else "DIFFERENT TIGER"
+mark = "🎯" if c["same_tiger"] else "🚫"
+print(f"\n{mark} Conclusion: {verdict}  (confidence: {c['confidence']})")
+if reference_name and c["same_tiger"]:
+    print(f"   Identified as: {reference_name}")
+print(f"   Reasoning: {c['reasoning']}\n")
+```
+
+def main() -> None:
+parser = argparse.ArgumentParser(
+description=“Compare two tiger photos and decide if they show the same individual.”
+)
+parser.add_argument(“sighting”, type=Path, help=“Path to your unknown sighting photo”)
+parser.add_argument(“reference”, type=Path, help=“Path to the labelled reference photo”)
+parser.add_argument(
+“–name”,
+type=str,
+default=None,
+help=“Name of the reference tiger (e.g. ‘Bufferwaali’)”,
+)
+parser.add_argument(
+“–model”,
+type=str,
+default=“claude-opus-4-5”,
+help=“Anthropic model to use (default: claude-opus-4-5)”,
+)
+parser.add_argument(
+“–json”, action=“store_true”, help=“Print raw JSON instead of formatted output”
+)
+args = parser.parse_args()
+
+```
+if not os.getenv("ANTHROPIC_API_KEY"):
+    sys.exit("Error: ANTHROPIC_API_KEY environment variable is not set.")
+
+result = compare_tigers(args.sighting, args.reference, args.name, args.model)
+
+if args.json:
+    print(json.dumps(result, indent=2))
+else:
+    pretty_print(result, args.name)
+```
+
+if **name** == “**main**”:
+main()
