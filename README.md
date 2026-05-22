@@ -4,8 +4,18 @@
 **Identify tigers from photographs using LLM vision.** Compares two tiger images feature-by-feature (eye-patch shape, whisker pads, stripe spacing, mid-body stripe cluster) and decides whether they show the same individual.
 
 > Tiger stripes are fingerprints. No two tigers share the same pattern. This tool asks an LLM to do that comparison for you.
+## How to run
 
-## How to run (4 steps)
+**Option A — Just want to see what's inside (non-coders):**
+Download `tiger-id.zip`, unzip it, and open `tiger_id/compare.py` in any text editor. The prompt, the API call, and the comparison logic are all in one file (~150 lines, commented).
+
+**Option B — Actually run it (4 steps):**
+1. Download `tiger-id.zip` and unzip it, then `cd tiger-id`
+2. Install the dependency: `pip install -r requirements.txt`
+3. Set your API key: `export ANTHROPIC_API_KEY=sk-ant-...` (get one at console.anthropic.com)
+4. Run: `python -m tiger_id.compare your_sighting.jpg reference.jpg --name "Bufferwaali"`
+
+## How to run in detail for option B (4 steps)
 
 1. **Clone & install:** `git clone <this-repo> && cd tiger-id && pip install -r requirements.txt`
 1. **Set your API key:** `export ANTHROPIC_API_KEY=sk-ant-...` (get one at console.anthropic.com)
